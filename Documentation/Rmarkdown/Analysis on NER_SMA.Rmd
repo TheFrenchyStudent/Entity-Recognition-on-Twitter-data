@@ -1,0 +1,553 @@
+---
+title: 'Analysis of Twitter Accounts Descriptions : Named Entity Recognition'
+author: "Priya Varadarajan, Anne Kirika, Victor Ernoult"
+output:
+  pdf_document: default
+  html_document: default
+smart: no
+df_print: paged
+---
+
+#{.tabset} 
+## **Introduction**
+
+Interested in the subject of Named Entity Recognition, our team decided to study the descriptions of Twitter handles and attempt to retrieve useful information from it. This information would in turn be used to identify key characteristics of 2 major news channels'(CNN and Fox News) audiences. 
+
+This project will explore two assumptions we made in the beginning. 
+Firstly, we expect to be able to retrieve relevant information from Twitter accounts descriptions. This may prove to be a challenge, as the format varies greatly between accounts and does not follow any pre-defined structure.
+
+Secondly, we assume the 2 news channels will have different audiences, identifiable through accounts' descriptions. We purposefully selected 2 notoriously different news channels: Fox News, supposedly biased in favor of the Republican Party in the United States, and CNN, supposedly biased towards the Democratic Party.
+
+
+### Approach to Named Entity Recognition
+
+#### **_Data Extraction_**
+The data was retrieved using rtweet, an R library wrapper for the Twitter API. To make sure the data fits our expectations, we filtered it with a certain criteria. After skimming out irrelevant ones, only English accounts with a description and a follower count over 250 remained, the follower count helped to filter out inactive accounts.
+
+#### **_Methodology_**
+To tackle the recognition of named entities, we considered 3 different approaches: 
+
+*  Existing NLP packages for NER to automatically classify entities
+*  Dictionary-based method matching known words with their assigned entity name. 
+*  Machine learning Approach using CRF (Conditional Random Fields) and Random forests algorithms
+
+We will explain our approach for all techniques, the advantages, efficiency and the difficulties encountered. 
+
+###  Using Existing NLP packages for Entity Classification
+
+Our first attempt at tackling the problem consisted in applying existing NLP packages on newly seen text data, here the Twitter descriptions. To do so, we explored several NLP packages such as Spacy, MonkeyLearn and OpenNLP. Such packages offer models trained on large sets of labeled text documents, in which they learn to recognize entities within a sentence. They can then be fed entire sentences and output the words recognized as entities. 
+
+On Twitter descriptions, the results turned out to be disappointing overall.  Most entities easily recognizable by a human eye were not identified, and many random words were misassigned. This is explainable by the lack of structure in the descriptions. These do not follow any format, often use diminutives, slang, and rarely form complete sentences. The models were trained on classic texts and used information from the whole sentence to make their predictions, which is not available here. 
+
+```{r , echo = FALSE,message=FALSE, warning=FALSE}
+if(!require("knitr")) install.packages("knitr"); library("knitr")
+spacy_fox <- read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\spacy_NER_fox.csv", stringsAsFactor=F)
+spacy_fox$user_id <- as.character(spacy_fox$user_id)
+kable(head(spacy_fox)[c(1,2,4,5,6),-1], caption="Sample of the results using Spacy")
+```
+
+Since out-of-the-box models cannot be applied in this case, too particular, the automatic labeling of data into entity categories cannot be done through existing NLP packages.We resorted to a dictionary based approach to tackle the issue. 
+
+As discussed in class, both methods could eventually be combined into one. Once the entity tagging is done, and if it is accurate enough, it is conceivable to train a model on the labeled data to be able to treat unseen descriptions and potentially conduct a similar study on a different corpus of followers. Model creation is covered in the subsequent tabs.
+
+
+
+## **Dictionary based approach**
+
+#### a) Data Preprocessing
+
+To start with the dictionary based approach we had to do some preprocessing of data and tokenise them in order to tag them to named entities. We used existing text mining packages like 'tm' and 'udpipe' for cleaning the data and annotation. We used tm package to remove whitespaces, change the sentence to lower case, removal of stopwords and remove punctuation as they were not needed for the entity recognition.After this annotation was done to divide the text into token along with POS tagging.
+
+
+```{r , echo = FALSE}
+if(!require("knitr")) install.packages("knitr"); library("knitr")
+fox_preprocessed <- read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\fox_details.csv", stringsAsFactor=F)
+kable(head(fox_preprocessed)[, c("doc_id", "sentence_id", "sentence", "token_id", "token", "lemma", "upos")], caption="Resulting data:")
+```
+
+
+#### b) Dictionary Creation and mapping entities
+
+In an effort to extract information from descriptions in form of entities, we defaulted to creating a large set of words dictionary  belonging to entities of interest namely profession, organization, hobbies, personality traits and religious affiliation. Description texts and tokens were then matched to these lists of words to map the entities. Two ways of performing the match were considered.
+
+##### **_Flexible match approach_**
+
+Since the descriptions do not follow any format, an information can often be hidden under a diminutive, a misspelled word, or a different way of saying it than the exact word in the dictionary. To partially compensate for this issue, we implemented ways of comparing similarities between words or expressions, to allow a partial match to still lead to a classification. One of these ways is the Levenshtein distance, which measures the difference between two strings. It is implemented in base R with the grepl function. 
+
+```
+# Example of a grepl utilization
+
+lookup <- function(word, dictionnary){
+  # Checks if the word is there, bounded to avoid finding it within another word
+  s = sapply(dictionnary, grepl, pattern=paste0("\\b", word, "\\b")) 
+  return(names(dictionnary[s])[1])
+  }
+```
+
+Overall though, in spite of trying several alternatives, an increased flexibility in matching always led to an overflow of false positives and misclassifications which rendered the data invalid. We therefore went to a completely strict match to avoid discrepancies and huge number of false positives. 
+
+##### **_Strict match approach_**
+
+In the strict match approach the dictionary words were matched with the tokens and they returned the entity in dictionary if there was a perfect match and this approach seemed to be more prominent in our case for mapping the entities.This was done using the dplyr function map values
+
+```
+# Example of the exact match approach
+
+#Mapping the values from the Dictionary into a new column for the entity types based on the tokens
+
+CNN_details$Entity <- plyr::mapvalues(CNN_details$token, from = dictionaryEntity$Value, to = dictionaryEntity$Entity)
+
+```
+Below is the sample of entity mapped data
+```{r , echo = FALSE}
+if(!require("knitr")) install.packages("knitr"); library("knitr")
+
+CNN_details = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\CNN_details.csv",stringsAsFactor=F)
+
+kable(head(CNN_details)[, c("doc_id", "sentence", "token", "upos","Entity")], caption="Named Entity:")
+
+```
+
+This approach was followed for both CNN and fox and the results were quite efficient.
+
+### **Results and insights as part of dictionary based approach**
+
+Starting with an intial follower count of **3951** and **4620** for CNN and FOX news respectively,the data sets are prepared for NER process by first tokenization and lemmatization of the description variable of the news channels followers description. Lemmatized data is then matched up with a dictionary lookup of defined entity types. The insights infered from the entities are :-
+
+#### **_Profession Entity Highest_**
+Combined entity types for both Fox News and CNN show that most of the followers revealed professions in their profiles more than the other entity type covered in this paper.Religion was the least.
+
+```{r , echo = FALSE,message=FALSE, warning=FALSE}
+if(!require("knitr")) install.packages("knitr"); library("knitr")
+if(!require("ggplot2")) install.packages("ggplot2"); library("ggplot2")
+if(!require("dplyr")) install.packages("dplyr"); library("dplyr")
+
+Entity_CNN_Final = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Entity_CNN_Final.csv",stringsAsFactor=F)
+Entity_Fox_Final = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Entity_Fox_Final.csv",stringsAsFactor=F)
+
+CNNfreq <- as.data.frame(table(Entity_CNN_Final$Entity))
+CNNfreq['NewsChannel'] = "CNN"
+names(CNNfreq)[names(CNNfreq) == 'Var1'] <- 'Entitytype'
+
+FOXfreq <- as.data.frame(table(Entity_Fox_Final$Entity))
+FOXfreq['NewsChannel'] = "FOX"
+names(FOXfreq)[names(FOXfreq) == 'Var1'] <- 'Entitytype'
+
+grouped <- bind_rows(CNNfreq,FOXfreq)
+
+ggplot(grouped, aes(fill=NewsChannel, y=Freq, x=Entitytype)) + 
+  geom_bar(position="dodge", stat="identity")+
+  ggtitle("Fox/CNN Entity Distribution") + 
+  scale_fill_manual(values = c("royalblue4","red2"))+
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face="bold"))
+```
+
+
+####**Entity Distribution Across CNN and Fox **
+####**Profession Distribution**
+There is about **17%** Professions that are in Fox and not available in CNN followers,whilst **12%** of professions available in CNN and not In Fox News.Although CNN had lesser entities due to intial dataset used,profession entities revealed that CNN were more scholary having profession entities such as student,school,university,writer and teacher higher than Fox. Some of the missing professions from CNN were firefighter,technologist,biomedical,meterologist e.t.c whilst those missing from Fox include painting,embroidery,badminton,dymnastics.
+
+```{r, echo = FALSE,message=FALSE, warning=FALSE}
+if(!require("knitr")) install.packages("knitr"); library("knitr")
+if(!require("gridExtra")) install.packages("gridExtra"); library("gridExtra")
+if(!require("ggplot2")) install.packages("ggplot2"); library("ggplot2")
+if(!require("dplyr")) install.packages("dplyr"); library("dplyr")
+
+Entity_CNN_Final = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Entity_CNN_Final.csv",stringsAsFactor=F)
+Entity_Fox_Final = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Entity_Fox_Final.csv",stringsAsFactor=F)
+###CNN
+CTopProfessions = Entity_CNN_Final[Entity_CNN_Final$Entity == "Profession",]
+CFreq <- as.data.frame(sort(table(CTopProfessions$token)))
+CFreq <- CFreq[CFreq$Freq >= 35,]
+names(CFreq)[names(CFreq) == 'Var1'] <- 'Profession'
+
+c <- ggplot(data= CFreq, aes(x=Profession, y=Freq)) +
+     coord_flip()+
+     geom_bar(fill="royalblue4",stat="identity")+
+     ggtitle("Top CNN Professions") + 
+     theme_minimal() +
+     theme(plot.title = element_text(hjust = 0.5, face="bold"))
+###FOX
+FTopProfessions = Entity_Fox_Final[Entity_Fox_Final$Entity == "Profession",]
+Freq <- as.data.frame(sort(table(FTopProfessions$token)))
+Freq <- Freq[Freq$Freq >= 35,]
+names(Freq)[names(Freq) == 'Var1'] <- 'Profession'
+
+f <- ggplot(data= Freq, aes(x=Profession, y=Freq)) +
+  coord_flip()+
+  geom_bar(fill="red2",stat="identity")+
+  ggtitle("Top FOX Professions") + 
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face="bold"))
+
+grid.arrange(c,f,ncol=2)
+
+
+```
+
+#### **Personality Distribution**
+Predominant personality entity in both CNN and Fox News are **good** and **proud** however the number of proud in Fox News is double that in CNN. Some key personality entities missing in CNN and are in Fox include **trustworthy**,**emotional**,**dynamic** and **hypocrite**. Personality entities in CNN and are missing in Fox include **anxious**,**energetic**,**adventurous**,**passive**,**jealous**.
+
+```{r, echo = FALSE,message=FALSE, warning=FALSE}
+if(!require("knitr")) install.packages("knitr"); library("knitr")
+if(!require("gridExtra")) install.packages("gridExtra"); library("gridExtra")
+if(!require("ggplot2")) install.packages("ggplot2"); library("ggplot2")
+if(!require("dplyr")) install.packages("dplyr"); library("dplyr")
+
+Entity_CNN_Final = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Entity_CNN_Final.csv",stringsAsFactor=F)
+Entity_Fox_Final = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Entity_Fox_Final.csv",stringsAsFactor=F)
+ ###CNN Personalities
+ CTopPersonality = Entity_CNN_Final[Entity_CNN_Final$Entity == "Personality",]
+ CFreq1 <- as.data.frame(sort(table(CTopPersonality$token)))
+ CFreq <- CFreq1[CFreq1$Freq >= 15,]
+ names(CFreq)[names(CFreq) == 'Var1'] <- 'Personality'
+ 
+ c <- ggplot(data= CFreq, aes(x=Personality, y=Freq)) +
+   coord_flip()+
+   geom_bar(fill="royalblue4",stat="identity")+
+   ggtitle("Top CNN Personalities") + 
+   theme_minimal() +
+   theme(plot.title = element_text(hjust = 0.5, face="bold"))
+ ###FOX Personality
+ FTopPersonality = Entity_Fox_Final[Entity_Fox_Final$Entity == "Personality",]
+ Freq1 <- as.data.frame(sort(table(FTopPersonality$token)))
+ Freq <- Freq1[Freq1$Freq >= 15,]
+ names(Freq)[names(Freq) == 'Var1'] <- 'Personality'
+ 
+ f <- ggplot(data= Freq, aes(x=Personality, y=Freq)) +
+   coord_flip()+
+   geom_bar(fill="red2",stat="identity")+
+   ggtitle("Top FOX Personalities") + 
+   theme_minimal() +
+   theme(plot.title = element_text(hjust = 0.5, face="bold"))
+ 
+ grid.arrange(c,f,ncol=2)
+```
+
+####**Hobbies Distribution**
+**Music**,**sports**,**politics** and **football** emerge as the top interests for both news channels. Some hobbies missing in CNN entities include yoga,bowling,drawing,coloring and canoeing whilst badminton,weights,embroidery,curling,trekkie,birdie are missing in Fox.
+
+```{r, echo = FALSE,message=FALSE, warning=FALSE}
+if(!require("knitr")) install.packages("knitr"); library("knitr")
+if(!require("gridExtra")) install.packages("gridExtra"); library("gridExtra")
+if(!require("ggplot2")) install.packages("ggplot2"); library("ggplot2")
+if(!require("dplyr")) install.packages("dplyr"); library("dplyr")
+
+Entity_CNN_Final = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Entity_CNN_Final.csv",stringsAsFactor=F)
+Entity_Fox_Final = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Entity_Fox_Final.csv",stringsAsFactor=F)
+ ###CNN Hobbies
+ CTopHobbies = Entity_CNN_Final[Entity_CNN_Final$Entity == "Hobbies",]
+ CFreq1 <- as.data.frame(sort(table(CTopHobbies$token)))
+ CFreq <- CFreq1[CFreq1$Freq >= 15,]
+ names(CFreq)[names(CFreq) == 'Var1'] <- 'Hobbies'
+ 
+ c <- ggplot(data= CFreq, aes(x=Hobbies, y=Freq)) +
+   coord_flip()+
+   geom_bar(fill="royalblue4",stat="identity")+
+   ggtitle("Top CNN Hobbies") + 
+   theme_minimal() +
+   theme(plot.title = element_text(hjust = 0.5, face="bold"))
+ ###FOX Hobbies
+ FTopHobbies = Entity_Fox_Final[Entity_Fox_Final$Entity == "Hobbies",]
+ Freq1 <- as.data.frame(sort(table(FTopHobbies$token)))
+ Freq <- Freq1[Freq1$Freq >= 15,]
+ names(Freq)[names(Freq) == 'Var1'] <- 'Hobbies'
+ 
+ f <- ggplot(data= Freq, aes(x=Hobbies, y=Freq)) +
+   coord_flip()+
+   geom_bar(fill="red2",stat="identity")+
+   ggtitle("Top FOX Hobbies") + 
+   theme_minimal() +
+   theme(plot.title = element_text(hjust = 0.5, face="bold"))
+ 
+ grid.arrange(c,f,ncol=2)
+
+```
+
+####**Organization Distribution**
+**Twitter**  and facebook are the top organization entity. However not alot of followers display their organizations,this is seen by the low count of organization entities.For these reason both entities are combined for the news channels. Some organizations present in Fox and missing in CNN include Total,CBS,Nike,Manpowergroup,Spotify.Ding,SAP,Paypal,Sony,Xerox, Deliveroo are among the organizations missing in Fox News. It is also important to note Twitter identifications may very well be due to the user talking about a Twitter account of anything else related to the company, without being an employee there.
+
+```{r, echo = FALSE,message=FALSE, warning=FALSE}
+if(!require("knitr")) install.packages("knitr"); library("knitr")
+if(!require("gridExtra")) install.packages("gridExtra"); library("gridExtra")
+for (i in c('SnowballC','slam','tm','Matrix','wordcloud','RColorBrewer','wordcloud2')){
+  if (!require(i, character.only=TRUE)) install.packages(i, repos = "http://cran.us.r-project.org")
+  require(i, character.only=TRUE)
+}
+
+shiny = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\shiny.csv",stringsAsFactor=F)
+Organization <- shiny[shiny$Entity== "Organization",]
+Organization<-Corpus(VectorSource(Organization$token))
+
+wordcloud(Organization,max.words = 500, min.freq = 1,
+          random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(5, "Dark2"))
+
+```
+
+####**Religion Distribution**
+This entity type had the least number of distribution among the 5 entities. Entities reveal religious affliated terms.
+
+```{r, echo = FALSE,message=FALSE, warning=FALSE}
+if(!require("knitr")) install.packages("knitr"); library("knitr")
+if(!require("gridExtra")) install.packages("gridExtra"); library("gridExtra")
+if(!require("ggplot2")) install.packages("ggplot2"); library("ggplot2")
+if(!require("dplyr")) install.packages("dplyr"); library("dplyr")
+
+Entity_CNN_Final = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Entity_CNN_Final.csv",stringsAsFactor=F)
+Entity_Fox_Final = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Entity_Fox_Final.csv",stringsAsFactor=F)
+ ###CNN Religion
+ CTopReligion = Entity_CNN_Final[Entity_CNN_Final$Entity == "Religion",]
+ CFreq1 <- as.data.frame(sort(table(CTopReligion$token)))
+ CFreq <- CFreq1[CFreq1$Freq >= 1,]
+ names(CFreq)[names(CFreq) == 'Var1'] <- 'Religion'
+ 
+ c <- ggplot(data= CFreq, aes(x=Religion, y=Freq)) +
+   coord_flip()+
+   geom_bar(fill="royalblue4",stat="identity")+
+   ggtitle("Top CNN Religion") + 
+   theme_minimal() +
+   theme(plot.title = element_text(hjust = 0.5, face="bold"))
+ ###FOX Religion
+ FTopReligion = Entity_Fox_Final[Entity_Fox_Final$Entity == "Religion",]
+ Freq1 <- as.data.frame(sort(table(FTopReligion$token)))
+ Freq <- Freq1[Freq1$Freq >= 1,]
+ names(Freq)[names(Freq) == 'Var1'] <- 'Religion'
+ 
+ f <- ggplot(data= Freq, aes(x=Religion, y=Freq)) +
+   coord_flip()+
+   geom_bar(fill="red2",stat="identity")+
+   ggtitle("Top FOX Religion") + 
+   theme_minimal() +
+   theme(plot.title = element_text(hjust = 0.5, face="bold"))
+ 
+ grid.arrange(c,f,ncol=2)
+
+```
+
+####**_News Channel Followers Country of Origin_**
+Data revealed that most of the followers for both news channels came from the **USA** however in general **CNN** had more followers revealing their country of origin than FoxNews followers.
+
+```{r, echo = FALSE,message=FALSE, warning=FALSE}
+if(!require("knitr")) install.packages("knitr"); library("knitr")
+if(!require("gridExtra")) install.packages("gridExtra"); library("gridExtra")
+if(!require("ggplot2")) install.packages("ggplot2"); library("ggplot2")
+if(!require("dplyr")) install.packages("dplyr"); library("dplyr")
+
+Entity_CNN_Final = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Entity_CNN_Final.csv",stringsAsFactor=F)
+Entity_Fox_Final = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Entity_Fox_Final.csv",stringsAsFactor=F)
+
+CNNfreq <- as.data.frame(table(Entity_CNN_Final$country))
+CNNfreq['NewsChannel'] = "CNN"
+names(CNNfreq)[names(CNNfreq) == 'Var1'] <- 'Country'
+
+
+FOXfreq <- as.data.frame(table(Entity_Fox_Final$country))
+FOXfreq['NewsChannel'] = "FOX"
+names(FOXfreq)[names(FOXfreq) == 'Var1'] <- 'Country'
+
+names(FOXfreq) <- names(CNNfreq)
+grouped <-bind_rows(CNNfreq,FOXfreq)
+
+ggplot(grouped, aes(fill= NewsChannel, y=Freq, x=Country)) + 
+  geom_bar(position="dodge", stat="identity")+
+   coord_flip()+
+  ggtitle("Fox/CNN Follower Country Of Origin") + 
+  scale_fill_manual(values = c("royalblue4","red2"))+
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face="bold"))
+
+```
+
+#### c) Limitations in dictionary based approach
+Since the dictionary lookup matches were purely done using  strict match unigram's a lot of entities were lost in the process.That is missplet tokens,bi-grams or words put within context didn't not apply in the dictionary approach used hence this could inturn lead to potential wrong entity recognition.
+
+
+## **Machine Learning approach**
+
+As the next level of analysis of entity recognition , we went for the machine learning approach where we used the labelled data as part of Dictionary lookup for training the data. We tried two methods CRF(Conditional Random fields) and Random forests.
+
+###CRF(Conditional Random Fields)
+
+#### Model Building
+
+For CRF we first took the labelled data from the Dictionary look up approach and this labelled entity data was used for Training the model using CRF suite package. We took CNN data as training data with the columns docid, token, UPOS and entity and then added the tag of the preceding and the next term for both Parts of Speech and the tokens and then divided the data into training and validation set (80:20 ratio). The model was trained using L-BFGS with L1/L2 regularization.
+
+```
+# CRF Model
+
+model <- crf(y = CRF_model_train$Entity, 
+             x = CRF_model_train[, c("upos", "pos_previous", "pos_next", 
+                                     "token", "token_previous", "token_next")], 
+             group = CRF_model_train$doc_id, 
+             method = "lbfgs",
+             options = list(max_iterations = 35))
+
+```
+
+The below loss function graph shows the error loss with iterations,we can see that after 25 iterations the loss becomes stagnant
+
+```{r , echo = FALSE,message=FALSE, warning=FALSE}
+if(!require("knitr")) install.packages("knitr"); library("knitr")
+if(!require("crfsuite")) install.packages("crfsuite"); library("crfsuite")
+CRF_model_train = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\CRF_model_train.csv",stringsAsFactor=F)
+
+model <- crf(y = CRF_model_train$Entity, 
+             x = CRF_model_train[, c("upos", "pos_previous", "pos_next", 
+                                     "token", "token_previous", "token_next")], 
+             group = CRF_model_train$doc_id, 
+             method = "lbfgs",
+             options = list(max_iterations = 35))
+
+stats = summary(model)
+
+plot(stats$iterations$loss, pch = 20, type = "b", 
+     main = "CRF Loss evolution", xlab = "Iteration", ylab = "Loss")
+
+```
+
+###Random Forests
+For this final model, we combine an approach based on memory of previously seen words, word featurization, context information, and classify the resulting observations using a Random Forest classifier. 
+The memory-based part is obtained by learning the most common entity identifications for each word. Once it is trained, if a new word has already been seen, it will be classified as it was in the past. 
+
+In addition to this major feature, other information are drawn from the word itself. It includes whether the word contains uppercase, lowercase letters, whether it is in the title format, how many characters it is made of and whether there is digits within the word. The part of speech tag is also retrieved.
+These features are also retrieved for the preceding word and the following one, and combined to form a feature space.
+
+Finally, these variables are used to predict the named entity using a random forest classifier.
+
+
+#### Model Evaluation for CRF and Random Forests
+
+Finally below are the results achieved as part of both CRF and Random forests 
+
+The models applied on the validation set of CNN gives the below confusion matrix and the F1,Precision, recall and accuracy values of the models (CRF and RandomForests)
+
+```{r , echo = FALSE,message=FALSE, warning=FALSE}
+
+if(!require("knitr")) install.packages("knitr"); library("knitr")
+if(!require("e1071")) install.packages("e1071"); library("e1071")
+
+library(caret)
+print("CRF Confusion Matrix")
+CRF_model_test1 = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\CRF_model_test1.csv")
+
+result = confusionMatrix(CRF_model_test1$label, CRF_model_test1$Entity, mode = "prec_recall")
+
+result
+
+print("Random Forest Confusion Matrix")
+rfc_preds = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Random Forest Fox Predictions.csv", stringsAsFactor=F)
+result = confusionMatrix(as.factor(rfc_preds$label), as.factor(rfc_preds$Entity), mode = "prec_recall")
+result
+```
+
+#### Prediction of the models (CRF and Random Forests) on a new data set - Fox News
+
+After evaluating the models on the validation set, the models were applied on Fox news data and the results were pretty good.Below graphs show the predicted Entities for Fox news after applying the models CRF and Random forests
+
+```{r , echo = FALSE,message=FALSE, warning=FALSE}
+if(!require("knitr")) install.packages("knitr"); library("knitr")
+if(!require("dplyr")) install.packages("dplyr"); library("dplyr")
+if(!require("udpipe")) install.packages("udpipe"); library("udpipe")
+library(lattice)
+
+Fox_CRF_Predicted_Entity = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Fox_CRF_Predicted_Entity.csv", stringsAsFactor=F)
+stats <- subset(Fox_CRF_Predicted_Entity, label %in% c("Profession")) 
+stats <- txt_freq(stats$token)
+stats$key <- factor(stats$key, levels = rev(stats$key))
+barchart(key ~ freq, data = head(stats, 20), col = "cadetblue", 
+         main = "Predicted Profession in Fox news (CRF)", xlab = "Freq")
+
+Fox_RandomForest_Predicted_Entity = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Random Forest Fox Predictions.csv", stringsAsFactor=F)
+stats <- subset(Fox_RandomForest_Predicted_Entity, label %in% c("Profession")) 
+stats <- txt_freq(stats$token)
+stats$key <- factor(stats$key, levels = rev(stats$key))
+barchart(key ~ freq, data = head(stats, 20), col = "brown2", 
+         main = "Predicted Profession in Fox news (Random Forest)", xlab = "Freq")
+```
+
+```{r , echo = FALSE,message=FALSE, warning=FALSE}
+
+if(!require("knitr")) install.packages("knitr"); library("knitr")
+library(dplyr)
+Fox_CRF_Predicted_Entity= read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Fox_CRF_Predicted_Entity.csv", stringsAsFactor=F)
+stats1 <- subset(Fox_CRF_Predicted_Entity, label %in% c("Personality")) 
+stats1 <- txt_freq(stats1$token)
+stats1$key <- factor(stats1$key, levels = rev(stats1$key))
+barchart(key ~ freq, data = head(stats1, 20), col = "cadetblue", 
+         main = "Predicted Personality in Fox news (CRF)", xlab = "Freq")
+
+Fox_RandomForest_Predicted_Entity= read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Random Forest Fox Predictions.csv", stringsAsFactor=F)
+stats1 <- subset(Fox_RandomForest_Predicted_Entity, label %in% c("Personality")) 
+stats1 <- txt_freq(stats1$token)
+stats1$key <- factor(stats1$key, levels = rev(stats1$key))
+barchart(key ~ freq, data = head(stats1, 20), col = "brown2", 
+         main = "Predicted Personality in Fox news (Random Forest)", xlab = "Freq")
+```
+
+```{r , echo = FALSE,message=FALSE, warning=FALSE}
+if(!require("knitr")) install.packages("knitr"); library("knitr")
+library(dplyr)
+Fox_CRF_Predicted_Entity = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Fox_CRF_Predicted_Entity.csv", stringsAsFactor=F)
+stats3 <- subset(Fox_CRF_Predicted_Entity, label %in% c("Hobbies")) 
+stats3 <- txt_freq(stats3$token)
+stats3$key <- factor(stats3$key, levels = rev(stats3$key))
+barchart(key ~ freq, data = head(stats3, 20), col = "cadetblue", 
+         main = "Predicted Hobbies in Fox news (CRF)", xlab = "Freq")
+
+Fox_RandomForest_Predicted_Entity = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Random Forest Fox Predictions.csv", stringsAsFactor=F)
+stats3 <- subset(Fox_RandomForest_Predicted_Entity, label %in% c("Hobbies")) 
+stats3 <- txt_freq(stats3$token)
+stats3$key <- factor(stats3$key, levels = rev(stats3$key))
+barchart(key ~ freq, data = head(stats3, 20), col = "brown2", 
+         main = "Predicted Hobbies in Fox news (Random Forest)", xlab = "Freq")
+```
+
+```{r , echo = FALSE,message=FALSE, warning=FALSE}
+if(!require("knitr")) install.packages("knitr"); library("knitr")
+library(dplyr)
+Fox_CRF_Predicted_Entity = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Fox_CRF_Predicted_Entity.csv", stringsAsFactor=F)
+stats2 <- subset(Fox_CRF_Predicted_Entity, label %in% c("Organization")) 
+stats2 <- txt_freq(stats2$token)
+stats2$key <- factor(stats2$key, levels = rev(stats2$key))
+barchart(key ~ freq, data = head(stats2, 20), col = "cadetblue", 
+         main = "Predicted Organisation in Fox news (CRF)", xlab = "Freq")
+
+Fox_RandomForest_Predicted_Entity = read.csv("C:\\Users\\akirika\\Desktop\\SMAGroup5\\Rmarkdown\\Random Forest Fox Predictions.csv", stringsAsFactor=F)
+stats2 <- subset(Fox_RandomForest_Predicted_Entity, label %in% c("Organization")) 
+stats2 <- txt_freq(stats2$token)
+stats2$key <- factor(stats2$key, levels = rev(stats2$key))
+barchart(key ~ freq, data = head(stats2, 20), col = "brown2", 
+         main = "Predicted Organisation in Fox news (Random Forest)", xlab = "Freq")
+
+```
+
+
+
+#### Inference
+
+CRF - The results from CRF shows us that they are more efficient and give almost accurate predictions if the data is labelled properly. Hence  Machine learning approach with a dictionary lookup labelled data can give us more precise results for named entity recognition in NLP.
+
+
+Random Forests - The results from the three approaches developped in the Python Notebook, around memory-based classification and random forests, give interesting insights into which method should be prioritized. The simplistic memory-based approache gives impressively good results on an unseen dataset, and allows classification of most of the entities. It is possible that these results are due to the similarity of the datasets between CNN & Fox, both having a similar structure and both coming from Twitter descriptions. 
+However, a simple memory recognition may not be sufficient to generalize to uncommon data, hence the need to extract features from the words themselves to draw extra information, not dependent on whether the word has already been seen or not.
+
+Using a random forest classifier on this data only showed extremely poor results.
+
+Finally, a combination of memory-recognition and featurization on both the word itself and its surrounding words proved to be very effective. Moreover, this approach may very well offer more generalization potency for applications outside the 2 datasets studied. Overfit should still be watched out for, as the model relies heavily on memory-recognition.
+
+
+
+In our analysis CRF and Random forests almost have the same accuracy, but other evaluation metrics such as precision, recall, F1 are higher for random forests classifier when combined with the approach of surrounding words similar to CRF. Hence we can say that a combination of random forest classifier with the logic of featurisation of surrounding words would be one of the good methodologies for Entity recognition.
+
+
+## **Conclusion**
+
+Throughout our approach, we worked on several ways of performing Named Entity Recognition on big datasets, which does not allow for human labeling.Named Entity Recognition is very dependent on the context and models can hardly generalize to different cases. 
+<br>
+This is probably why custom models trained on case-specific data performed very well compared to the approaches tried in the first instance (out-of-the-box NER models) in our analysis. To tackle any new problem statement with regards to entity recognition, it may therefore be relevant to adopt a combination of dictionary-based tagging followed with building customised models using machine learning with existing algorithms. 
+<br>
+Also, the model developed in this context of entity recognition applied to different analysis like analysis of job descriptions might perform the same or bad. Hence with named recognition more research might be required on developing models using machine learning or any other approaches that would suffice all scenarios. 
+
+
