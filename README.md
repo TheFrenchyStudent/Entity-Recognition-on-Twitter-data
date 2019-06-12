@@ -11,7 +11,7 @@ Comparison of several methods:
 
 Deliverables: R & Python Scripts + RMarkdown for presenting the results
 
-
+## Organization
 The final report is available as an RMarkdown, and pdf file.
 
 The scripts written for the analysis can be found on this repository.
