@@ -18,10 +18,10 @@ library(lattice)
 ##-------------------Extracting the data from twitter for FOX News and CNN----------------#######
 
 #Providing the key tokens for authentication onto to twitter and using rtweet for extracting the information
-consumer_key <- "OD0A8Z1EY65la2l40GFHGoHmN"
-consumer_secret <- "nHVQp9G7GIcIdq7bnZdvJW1Wy6qP11xO60BA0HXbbdslZO88ud"
-access_token <- "569483185-NiO006TdngN8jy4dy2GOiiunVL6zwFLtmlrsxJtG"
-access_secret <- "37x3kUAyQOTB2rHR9HZWSdmunvnqPuuWEBVGZkrQEAGzj"
+consumer_key <- ""
+consumer_secret <- ""
+access_token <- ""
+access_secret <- ""
 
 appname <- "SMA"
 twitter_token = create_token(app = appname,consumer_key = consumer_key,consumer_secret = consumer_secret,
